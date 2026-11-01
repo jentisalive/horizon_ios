@@ -3,6 +3,15 @@ use crate::{crash, game, logging, ram_limit};
 
 /// Start the game. The executable supplies the allocator and retains the mod API marker.
 pub fn main() {
+    #[cfg(target_os = "ios")]
+    {
+        // The bundle is read-only. Keep saves, logs and caches inside the app sandbox.
+        let home = std::env::var_os("HOME").expect("iOS app sandbox HOME");
+        let home = std::path::PathBuf::from(home).join("Documents/Horizon-Test");
+        std::fs::create_dir_all(home.join("resources")).expect("create iOS test home");
+        std::env::set_current_dir(&home).expect("enter iOS test home");
+        logging::set_game_home(home);
+    }
     horizon_threads::configure_allocator();
     horizon_client::telemetry::mark_start();
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -105,4 +114,25 @@ fn raise_open_file_limit() {
             }
         }
     }
+}
+
+/// iOS opens a small creative test world on the normal integrated server.
+/// Explicit launch arguments can override these defaults (e.g. in the simulator).
+pub(crate) fn game_args() -> std::vec::IntoIter<String> {
+    let mut args = Vec::new();
+    #[cfg(target_os = "ios")]
+    args.extend(
+        [
+            "--world",
+            "iOS Test",
+            "--creative",
+            "--test-terrain",
+            "--render-distance",
+            "2",
+        ]
+        .into_iter()
+        .map(String::from),
+    );
+    args.extend(std::env::args().skip(1));
+    args.into_iter()
 }

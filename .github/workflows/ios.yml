@@ -1,0 +1,52 @@
+name: iOS test IPA
+on:
+  workflow_dispatch:
+  push:
+    branches: ['codex/ios-test-port']
+    paths: ['crates/**', 'Cargo.*', 'third_party/**', 'packaging/ios/**', '.github/workflows/ios.yml']
+permissions:
+  contents: read
+concurrency:
+  group: ios-test-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  ipa:
+    runs-on: macos-15
+    timeout-minutes: 90
+    env:
+      IPHONEOS_DEPLOYMENT_TARGET: '16.0'
+      CARGO_BUILD_JOBS: '2'
+      CARGO_INCREMENTAL: '0'
+      CARGO_PROFILE_DEV_DEBUG: '0'
+      HORIZON_IOS_PROFILE: dev
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ios-device
+      - name: Build unsigned device IPA
+        run: packaging/ios/build.sh device --without-resources
+      - name: Check IPA structure and architecture
+        run: |
+          unzip -t dist/ios/device/Horizon-unsigned.ipa
+          xcrun lipo -info dist/ios/device/Payload/Horizon.app/horizon-client
+          plutil -lint dist/ios/device/Payload/Horizon.app/Info.plist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Horizon-iOS-unsigned
+          path: |
+            dist/ios/device/Horizon-unsigned.ipa
+            packaging/ios/README.md
+          if-no-files-found: error
+          retention-days: 14
+      - name: Build notes
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<'NOTES'
+          Unsigned arm64 iOS 16+ test IPA is in **Horizon-iOS-unsigned**.
+          Sign it before installing. This debug build has no audio/controllers or Minecraft resources.
+          Copy your own prepared resource folder to **Documents/Horizon-Test/resources** via Files/Finder,
+          then restart the app. See the bundled README for instructions.
+          NOTES

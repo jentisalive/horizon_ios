@@ -310,6 +310,7 @@ mod text_displays;
 mod titles;
 mod tnt;
 mod totem;
+mod touch;
 mod trading;
 mod transient_blocks;
 mod trial_spawner;
@@ -510,11 +511,21 @@ impl Options {
     /// The command line, then what it asks of the process: the game folder, the account.
     /// A bad command line is a [`launch_api::UsageError`] (exit code 2, no crash report).
     fn read() -> Result<Option<Self>> {
-        let Some(mut o) = Self::parse(std::env::args().skip(1))
+        let Some(mut o) = Self::parse(crate::entry::game_args())
             .map_err(|e| launch_api::UsageError(e.to_string()))?
         else {
             return Ok(None);
         };
+        #[cfg(target_os = "ios")]
+        {
+            let imported = std::env::current_dir()?.join("resources");
+            if imported.join("horizon-resources.json").is_file() {
+                o.resources = imported;
+            } else if !o.resources.join("horizon-resources.json").is_file() {
+                // The missing-resources screen shows the writable import location.
+                o.resources = imported;
+            }
+        }
         // The launcher's account: online-mode servers need it. A bad file
         // only leaves the game offline.
         let session = if o.session_stdin {
@@ -2227,6 +2238,8 @@ struct Game<'a> {
     creative: bool,
     /// The game mode; `creative` mirrors `mode == Creative`.
     mode: horizon_client::command::args::GameMode,
+    touch: horizon_client_input::touch::TouchControls,
+    touch_menu_finger: Option<u64>,
     keys: HashSet<KeyCode>,
     // Physical input is separate from remapped and toggled movement keys.
     physical_keys: HashSet<KeyCode>,
@@ -7610,6 +7623,11 @@ impl Game<'_> {
     /// `KeyMapping.releaseAll` when a screen opens and
     /// `restoreToggleStatesOnScreenClosed` when it closes.
     fn track_toggle_screens(&mut self) {
+        if !self.touch_playing() {
+            for action in self.touch.reset() {
+                self.touch_action(action);
+            }
+        }
         let dialog = self.dialog_open();
         drop_held_behind_dialog(dialog, &mut self.keys, &mut self.left, &mut self.right);
         let playing = gameplay_has_keyboard(self.screen, self.title.is_some(), dialog);
@@ -7803,6 +7821,8 @@ impl Game<'_> {
             if capture {
                 self.mouse.set_ignore_first_move();
             }
+            self.captured = capture;
+        } else if cfg!(target_os = "ios") {
             self.captured = capture;
         } else if capture {
             self.mouse.set_ignore_first_move();
@@ -8055,6 +8075,7 @@ impl Game<'_> {
         self.frame_graph
             .draw(self.settings.horizon.overlay, &mut batch, &self.gui.atlas);
         self.draw_pad_cursor(&mut batch);
+        self.draw_touch_controls(&mut batch);
         self.resolve_inline_profiles(&batch.inline_profiles);
         batch
     }
@@ -16238,6 +16259,11 @@ impl Game<'_> {
 impl ApplicationHandler for Game<'_> {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.window.is_some() {
+            #[cfg(target_os = "ios")]
+            {
+                self.focused = true;
+                self.capture(self.touch_playing());
+            }
             return;
         }
         // The Window constructor: created fullscreen when options.txt or --fullscreen says so.
@@ -16283,6 +16309,12 @@ impl ApplicationHandler for Game<'_> {
         self.ime_area = None;
         self.apply_settings();
         self.previous = Instant::now();
+    }
+    #[cfg(target_os = "ios")]
+    fn suspended(&mut self, event_loop: &ActiveEventLoop) {
+        if let Some(window) = &self.window {
+            self.handle_window_event(event_loop, window.id(), WindowEvent::Focused(false));
+        }
     }
     fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
         let key = if self.window.as_ref().is_some_and(|w| w.id() == id)
@@ -16345,6 +16377,27 @@ impl Game<'_> {
         };
         if !ours {
             return;
+        }
+        if let WindowEvent::Touch(touch) = &event {
+            self.touch_event(event_loop, id, *touch);
+            return;
+        }
+        if matches!(
+            &event,
+            WindowEvent::Focused(false) | WindowEvent::Resized(_)
+        ) {
+            if self.touch_menu_finger.take().is_some() {
+                self.handle_window_event(
+                    event_loop,
+                    id,
+                    WindowEvent::MouseInput {
+                        device_id: DeviceId::dummy(),
+                        state: ElementState::Released,
+                        button: MouseButton::Left,
+                    },
+                );
+            }
+            self.reset_touch();
         }
         follow_keymap(&mut event);
         // MacosUtil.setCtrlClickEmulatesRightClick: Control + left click is a right click.
@@ -17953,6 +18006,8 @@ impl<'a> Game<'a> {
             } else {
                 horizon_client::command::args::GameMode::Survival
             },
+            touch: Default::default(),
+            touch_menu_finger: None,
             keys: HashSet::new(),
             physical_keys: HashSet::new(),
             physical_buttons: HashSet::new(),
@@ -20121,6 +20176,11 @@ impl ApplicationHandler for App {
         match self {
             App::Loading(loading) => loading.resumed(event_loop),
             App::Ready(game) => game.resumed(event_loop),
+        }
+    }
+    fn suspended(&mut self, event_loop: &ActiveEventLoop) {
+        if let App::Ready(game) = self {
+            game.suspended(event_loop);
         }
     }
     fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, event: WindowEvent) {

@@ -37,9 +37,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: Horizon-iOS-unsigned
-          path: |
-            dist/ios/device/Horizon-unsigned.ipa
-            packaging/ios/README.md
+          path: dist/ios/device/Horizon-unsigned.ipa
           if-no-files-found: error
           retention-days: 14
       - name: Build notes

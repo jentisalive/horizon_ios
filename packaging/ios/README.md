@@ -61,7 +61,7 @@ rustc --edition=2024 --test crates/horizon-client-input/src/touch.rs -o /tmp/tou
 /tmp/touch-tests
 ```
 
-`.github/workflows/ios.yml` checks the device and simulator targets on macOS; it
+`.github/workflows/ios.yml` builds the device target on macOS; it
 does not execute the app or distribute proprietary resources. Device testing is
 still required for Metal rendering, frame rate, memory pressure, safe-area layout,
 background/resume and save persistence. This first pass has no native iOS keyboard,

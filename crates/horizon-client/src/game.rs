@@ -19478,7 +19478,7 @@ fn build_renderer(
     atlas.font.reset_cache();
     // Made here when the worker did not: the renderer's own fallback has no LabPBR maps.
     let prepared = Some(prepared.unwrap_or_else(|| prepare_renderer_textures(pack)));
-    let mut renderer = pollster::block_on(Renderer::new(
+    let mut renderer = pollster::block_on(Box::pin(Renderer::new(
         window,
         offscreen,
         &assets.pixels,
@@ -19501,7 +19501,7 @@ fn build_renderer(
         api,
         translucent_batching,
         shader_pack,
-    ))?;
+    )))?;
     renderer.hud.sprite_animations = atlas
         .sprite_animations
         .iter()
@@ -19545,7 +19545,7 @@ fn loading_renderer(
     if let Some(atlas) = atlas {
         atlas.font.reset_cache();
     }
-    let mut renderer = pollster::block_on(Renderer::new(
+    let mut renderer = pollster::block_on(Box::pin(Renderer::new(
         window,
         offscreen,
         &[255, 255, 255, 255],
@@ -19565,7 +19565,7 @@ fn loading_renderer(
         // It draws no terrain.
         false,
         false,
-    ))?;
+    )))?;
     if let Some(atlas) = atlas {
         renderer.hud.sprite_animations = atlas
             .sprite_animations

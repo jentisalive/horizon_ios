@@ -19,8 +19,8 @@ jobs:
       IPHONEOS_DEPLOYMENT_TARGET: '16.0'
       CARGO_BUILD_JOBS: '2'
       CARGO_INCREMENTAL: '0'
-      CARGO_PROFILE_DEV_DEBUG: '0'
-      HORIZON_IOS_PROFILE: dev
+      # Unoptimized startup exhausted the iPhone main thread's 1 MiB stack.
+      HORIZON_IOS_PROFILE: fast
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -47,7 +47,36 @@ jobs:
         run: |
           cat >> "$GITHUB_STEP_SUMMARY" <<'NOTES'
           Unsigned arm64 iOS 16+ test IPA is in **Horizon-iOS-unsigned**.
-          Sign it before installing. This debug build has no audio/controllers or Minecraft resources.
+          Sign it before installing. This optimized test build has no audio/controllers or Minecraft resources.
           Copy your own prepared resource folder to **Documents/Horizon-Test/resources** via Files/Finder,
           then restart the app. See the bundled README for instructions.
           NOTES
+
+  simulator-smoke:
+    runs-on: macos-15-intel
+    timeout-minutes: 90
+    env:
+      IPHONEOS_DEPLOYMENT_TARGET: '16.0'
+      CARGO_BUILD_JOBS: '2'
+      CARGO_INCREMENTAL: '0'
+      HORIZON_IOS_PROFILE: fast
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-apple-ios
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ios-simulator-fast
+          cache-on-failure: true
+      - name: Build optimized simulator app
+        run: packaging/ios/build.sh simulator --without-resources
+      - name: Launch missing-resources screen in a fresh simulator
+        run: packaging/ios/smoke.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Horizon-iOS-simulator-smoke
+          path: dist/ios/simulator-smoke
+          if-no-files-found: ignore
+          retention-days: 14

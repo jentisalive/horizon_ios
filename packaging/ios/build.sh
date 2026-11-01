@@ -8,7 +8,11 @@ fi
 mode=${1:-simulator}
 resources=${2:-.local/horizon-client/26.3}
 case "$mode" in
-    simulator) target=aarch64-apple-ios-sim; sdk=iphonesimulator ;;
+    simulator)
+        sdk=iphonesimulator
+        if [[ $(uname -m) == arm64 ]]; then target=aarch64-apple-ios-sim
+        else target=x86_64-apple-ios; fi
+        ;;
     device) target=aarch64-apple-ios; sdk=iphoneos ;;
     *) echo 'Usage: build.sh simulator|device /path/to/prepared/resources' >&2; exit 1 ;;
 esac
@@ -36,6 +40,8 @@ else
     rsync -a --delete "$resources/" "$app/resources/"
 fi
 if [[ "$mode" == simulator ]]; then
+    # Simulator hosts can be Intel; the device-only capability would reject them.
+    /usr/libexec/PlistBuddy -c 'Delete :UIRequiredDeviceCapabilities' "$app/Info.plist"
     codesign --force --sign - "$app"
     echo "Built $app"
     echo "Install: xcrun simctl install booted '$app'"

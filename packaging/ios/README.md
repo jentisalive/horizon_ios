@@ -71,7 +71,7 @@ apps. It is not ready for App Store/TestFlight distribution.
 
 ## GitHub Actions IPA
 
-The `iOS test IPA` workflow cross-compiles a debug arm64 device IPA on an Intel
+The `iOS test IPA` workflow cross-compiles an optimized arm64 device IPA on an Intel
 macOS runner and uploads
 `Horizon-iOS-unsigned`. It runs on pushes to `codex/ios-test-port`, or manually.
 The IPA is **unsigned and contains no Minecraft resources**. Sign it with your
@@ -90,3 +90,14 @@ Local builds without resources use:
 ```sh
 packaging/ios/build.sh device --without-resources
 ```
+
+## Startup stack fix (0.1.1)
+
+Version 0.1.0 was unoptimized and overflowed the iPhone main thread stack while
+creating the missing-resources screen. Device builds now use the optimized
+`fast` profile. Renderer initialization futures and the missing-screen state live
+on the heap, and the startup callback avoids a large intermediate renderer tuple.
+The workflow also starts a separate, disposable iOS simulator without game assets
+and captures its first frame. A hosted simulator with no Metal device reports an
+explicit rendering skip; it is not evidence of rendering on a physical iPhone.
+Simulator builds select the architecture of the Mac host automatically.

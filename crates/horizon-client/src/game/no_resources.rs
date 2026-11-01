@@ -8,7 +8,7 @@ use winit::event::MouseButton;
 
 struct Missing {
     window: Option<Arc<Window>>,
-    renderer: Option<Renderer>,
+    renderer: Option<Box<Renderer>>,
     gui: UiResources,
     screen: NoResources,
     /// The pointer in physical pixels.
@@ -19,7 +19,7 @@ struct Missing {
 
 /// Shows the screen until the player closes it.
 pub(super) fn show(looked_in: &std::path::Path, settings: &Settings) -> Result<()> {
-    let mut app = Missing {
+    let mut app = Box::new(Missing {
         window: None,
         renderer: None,
         gui: UiResources {
@@ -33,9 +33,9 @@ pub(super) fn show(looked_in: &std::path::Path, settings: &Settings) -> Result<(
         pointer: (0.0, 0.0),
         api: settings.horizon.api,
         error: None,
-    };
+    });
     horizon_client::hud::GUI_SCALE.store(settings.gui_scale, Ordering::Relaxed);
-    EventLoop::new()?.run_app(&mut app)?;
+    EventLoop::new()?.run_app(app.as_mut())?;
     app.error.map_or(Ok(()), Err)
 }
 
@@ -100,29 +100,31 @@ impl ApplicationHandler for Missing {
             .with_title("Horizon")
             .with_window_icon(horizon_client::window::icon())
             .with_inner_size(winit::dpi::LogicalSize::new(1040.0, 700.0));
-        let made = event_loop
-            .create_window(attributes)
-            .map_err(Into::into)
-            .and_then(|window| {
-                let window = Arc::new(window);
-                let renderer = loading_renderer(
-                    window.clone(),
-                    false,
-                    Some(&self.gui.atlas),
-                    Some(self.gui.panorama.as_ref()),
-                    None,
-                    self.api,
-                )?;
-                Ok((window, renderer))
-            });
-        match made {
-            Ok((window, renderer)) => {
+        // Avoid returning a large Renderer through an and_then tuple: its extra
+        // stack copies exhausted the iOS main thread's 1 MiB stack in debug builds.
+        let window = match event_loop.create_window(attributes) {
+            Ok(window) => Arc::new(window),
+            Err(error) => {
+                self.error = Some(error.into());
+                event_loop.exit();
+                return;
+            }
+        };
+        match loading_renderer(
+            window.clone(),
+            false,
+            Some(&self.gui.atlas),
+            Some(self.gui.panorama.as_ref()),
+            None,
+            self.api,
+        ) {
+            Ok(renderer) => {
                 window.request_redraw();
                 self.window = Some(window);
-                self.renderer = Some(renderer);
+                self.renderer = Some(Box::new(renderer));
             }
-            Err(e) => {
-                self.error = Some(e);
+            Err(error) => {
+                self.error = Some(error);
                 event_loop.exit();
             }
         }

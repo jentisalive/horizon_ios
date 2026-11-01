@@ -1,0 +1,53 @@
+name: Publish iOS test release
+# Publish the exact IPA already built and verified by the iOS workflow.
+on:
+  workflow_dispatch:
+  push:
+    branches: ['codex/ios-test-port']
+    paths: ['.github/workflows/ios-release.yml']
+permissions:
+  actions: read
+  contents: write
+concurrency:
+  group: ios-test-release-v0.1.0
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.repository == 'jentisalive/horizon_ios' && github.ref == 'refs/heads/codex/ios-test-port'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      SOURCE_RUN: '41354720515'
+      SOURCE_SHA: '0774151124b528ad5b98cdc24bb9af02500453d8'
+      EXPECTED_IPA_SHA256: 'c0b1ca582c396c9d6cac03977a1eb6661be4c102ee694b9928e05dacbc6dd9c8'
+      RELEASE_TAG: ios-test-v0.1.0
+    steps:
+      - name: Verify the source build and release target
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(gh api "repos/$GH_REPO/actions/runs/$SOURCE_RUN" --jq .conclusion)" = success
+          test "$(gh api "repos/$GH_REPO/actions/runs/$SOURCE_RUN" --jq .head_sha)" = "$SOURCE_SHA"
+          test "$(gh release view "$RELEASE_TAG" --json targetCommitish --jq .targetCommitish)" = "$SOURCE_SHA"
+      - uses: actions/download-artifact@v4
+        with:
+          name: Horizon-iOS-unsigned
+          run-id: 41354720515
+          github-token: ${{ github.token }}
+          path: dist
+      - name: Verify IPA checksum and upload release assets
+        working-directory: dist
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s  %s\n' "$EXPECTED_IPA_SHA256" Horizon-unsigned.ipa > Horizon-iOS-SHA256SUMS.txt
+          sha256sum --check Horizon-iOS-SHA256SUMS.txt
+          gh release upload "$RELEASE_TAG" Horizon-unsigned.ipa Horizon-iOS-SHA256SUMS.txt --clobber
+      - name: Publish the prerelease
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release edit "$RELEASE_TAG" --draft=false --prerelease --latest=false
+          gh release view "$RELEASE_TAG" --json url --jq .url >> "$GITHUB_STEP_SUMMARY"

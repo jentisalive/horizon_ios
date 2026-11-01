@@ -1319,6 +1319,9 @@ impl wgpu::rwh::HasDisplayHandle for WindowDisplay {
 /// the renderer's start (#746). macOS has Metal only.
 fn backend_order(api: GraphicsApi, os: &str, wgpu_backend: bool) -> Vec<wgpu::Backends> {
     use wgpu::Backends;
+    if os == "ios" {
+        return vec![Backends::METAL];
+    }
     if os == "macos" || wgpu_backend {
         return vec![Backends::default()];
     }
@@ -1641,9 +1644,9 @@ async fn open_backend(
 const NO_GPU_DRIVER: &str = "No graphics driver with Vulkan, DirectX 12 or OpenGL found: Horizon needs \
      a GPU driver with one of them. Install the latest driver for your NVIDIA, AMD or Intel GPU and \
      start the game again";
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 const NO_GPU_DRIVER: &str = "No Metal graphics device found";
-#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+#[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "ios")))]
 const NO_GPU_DRIVER: &str = "No Vulkan or OpenGL graphics driver found: Horizon needs the Vulkan loader \
      (libvulkan.so.1) and a Vulkan driver for your GPU (Mesa's, or NVIDIA's), or OpenGL through EGL";
 /// Logs a step of the renderer's start, for a native crash in the graphics
@@ -8794,6 +8797,8 @@ mod tests {
         for api in GraphicsApi::ALL {
             assert_eq!(backend_order(api, "windows", true), [Backends::default()]);
             assert_eq!(order(api, "macos"), [Backends::default()]);
+            assert_eq!(order(api, "ios"), [Backends::METAL]);
+            assert_eq!(backend_order(api, "ios", true), [Backends::METAL]);
         }
     }
     /// The second try at a backend shows the adapters wgpu hides for reporting

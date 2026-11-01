@@ -308,8 +308,8 @@ pub fn resident_bytes() -> Option<u64> {
     Some(pages * u64::try_from(page).ok()?)
 }
 
-/// The memory this process holds in RAM, in bytes.
-#[cfg(target_vendor = "apple")]
+/// The memory this process holds in RAM, in bytes. libproc is macOS-only.
+#[cfg(target_os = "macos")]
 pub fn resident_bytes() -> Option<u64> {
     let size = std::mem::size_of::<libc::proc_taskinfo>() as libc::c_int;
     // SAFETY: all-zero is a valid value of this plain C struct, and the call writes at most `size`
@@ -332,13 +332,13 @@ pub fn resident_bytes() -> Option<u64> {
     windows,
     target_os = "linux",
     target_os = "android",
-    target_vendor = "apple"
+    target_os = "macos"
 )))]
 pub fn resident_bytes() -> Option<u64> {
     None
 }
 
-#[cfg(all(test, any(windows, target_os = "linux", target_vendor = "apple")))]
+#[cfg(all(test, any(windows, target_os = "linux", target_os = "macos")))]
 mod tests {
     use super::*;
 

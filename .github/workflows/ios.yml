@@ -29,6 +29,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: ios-device
+          cache-on-failure: true
       - name: Build unsigned device IPA
         run: packaging/ios/build.sh device --without-resources
       - name: Check IPA structure and architecture

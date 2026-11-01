@@ -174,10 +174,17 @@ pub fn is_broken_intel_vulkan(info: &wgpu::AdapterInfo) -> bool {
 }
 
 fn supported(adapter: &wgpu::Adapter, device: &wgpu::Device) -> bool {
-    let flags = adapter.get_downlevel_capabilities().flags;
-    let limits = device.limits();
-    flags.contains(wgpu::DownlevelFlags::VERTEX_STORAGE | wgpu::DownlevelFlags::COMPUTE_SHADERS)
-        && limits.max_storage_buffers_per_shader_stage >= 3
+    capabilities_supported(adapter.get_downlevel_capabilities().flags, &device.limits())
+}
+
+fn capabilities_supported(flags: wgpu::DownlevelFlags, limits: &wgpu::Limits) -> bool {
+    // Even an empty flat renderer allocates phase-2 indirect draw buffers.
+    // The iOS simulator exposes storage/compute without indirect execution.
+    flags.contains(
+        wgpu::DownlevelFlags::VERTEX_STORAGE
+            | wgpu::DownlevelFlags::COMPUTE_SHADERS
+            | wgpu::DownlevelFlags::INDIRECT_EXECUTION,
+    ) && limits.max_storage_buffers_per_shader_stage >= 3
         && limits.max_storage_buffer_binding_size >= super::arena::PAGE_BYTES
 }
 
@@ -830,6 +837,20 @@ impl Flat {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn storage_and_compute_without_indirect_execution_use_direct_draws() {
+        let flags = wgpu::DownlevelFlags::VERTEX_STORAGE | wgpu::DownlevelFlags::COMPUTE_SHADERS;
+        let limits = wgpu::Limits {
+            max_storage_buffers_per_shader_stage: 3,
+            max_storage_buffer_binding_size: super::super::arena::PAGE_BYTES,
+            ..Default::default()
+        };
+        assert!(!super::capabilities_supported(flags, &limits));
+        assert!(super::capabilities_supported(
+            flags | wgpu::DownlevelFlags::INDIRECT_EXECUTION,
+            &limits
+        ));
+    }
     use super::*;
 
     /// Draws as `render` writes them: solid (page, quads at a base vertex)

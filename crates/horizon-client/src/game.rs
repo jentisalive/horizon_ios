@@ -20350,7 +20350,9 @@ pub fn run() -> Result<()> {
         // 10 to 200 ms to get one back.
         horizon_threads::favour_current();
     }
-    if options.execution_role.is_client() {
+    // iOS terminates apps through the platform. winit ignores EventLoop::exit
+    // there, so swallowing SIGTERM would leave the app unable to terminate.
+    if options.execution_role.is_client() && !cfg!(target_os = "ios") {
         horizon_threads::catch_stop_signals();
     }
     let started = Instant::now();

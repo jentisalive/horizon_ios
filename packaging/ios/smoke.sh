@@ -11,9 +11,19 @@ runtime=$(python3 -c 'import json,sys; r=[r["identifier"] for r in json.load(ope
 device_type=$(python3 -c 'import json,sys; d=[d["identifier"] for d in json.load(open(sys.argv[1]))["devicetypes"] if d["name"] == "iPhone 16"]; assert d,"No iPhone 16 simulator type"; print(d[0])' "$scratch/devices.json")
 udid=$(xcrun simctl create "Horizon regression $(uuidgen)" "$device_type" "$runtime")
 cleanup() {
-    xcrun simctl terminate "$udid" dev.horizon.ios-test 2>/dev/null || true
-    xcrun simctl shutdown "$udid" 2>/dev/null || true
-    xcrun simctl delete "$udid" 2>/dev/null || true
+    # A failed application must not hang the harness while it shuts down.
+    python3 - "$udid" <<'PY_CLEANUP'
+import subprocess, sys
+for command in [
+    ["xcrun", "simctl", "terminate", sys.argv[1], "dev.horizon.ios-test"],
+    ["xcrun", "simctl", "shutdown", sys.argv[1]],
+    ["xcrun", "simctl", "delete", sys.argv[1]],
+]:
+    try:
+        subprocess.run(command, timeout=20, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except subprocess.TimeoutExpired:
+        pass
+PY_CLEANUP
     rm -rf "$scratch"
 }
 trap cleanup EXIT
@@ -30,7 +40,7 @@ export SIMCTL_CHILD_HORIZON_NO_AUDIO=1
 xcrun simctl launch --console "$udid" dev.horizon.ios-test > "$out/console.log" 2>&1 &
 launcher=$!
 for ((attempt=0; attempt<120; attempt++)); do
-    if grep -Eq 'SIGSEGV|Segmentation fault|stack overflow|EXC_BAD_ACCESS|exited due to signal' "$out/console.log"; then
+    if grep -Eq 'SIGSEGV|Segmentation fault|stack overflow|EXC_BAD_ACCESS|exited due to signal|panicked at|wgpu error: Validation Error' "$out/console.log"; then
         cat "$out/console.log"
         exit 1
     fi
@@ -40,12 +50,12 @@ for ((attempt=0; attempt<120; attempt++)); do
         if [[ -n ${GITHUB_STEP_SUMMARY:-} ]]; then cat "$out/result.txt" >> "$GITHUB_STEP_SUMMARY"; fi
         exit 0
     fi
+    if grep -Eq 'No Metal graphics device found' "$out/console.log"; then
+        echo 'SKIP rendering: this hosted simulator has no Metal device. Startup reached GPU discovery without the reported stack fault.' | tee "$out/result.txt"
+        if [[ -n ${GITHUB_STEP_SUMMARY:-} ]]; then cat "$out/result.txt" >> "$GITHUB_STEP_SUMMARY"; fi
+        exit 0
+    fi
     if ! kill -0 "$launcher" 2>/dev/null; then
-        if grep -Eq 'No Metal graphics device found' "$out/console.log"; then
-            echo 'SKIP rendering: this hosted simulator has no Metal device. Startup reached GPU discovery without the reported stack fault.' | tee "$out/result.txt"
-            if [[ -n ${GITHUB_STEP_SUMMARY:-} ]]; then cat "$out/result.txt" >> "$GITHUB_STEP_SUMMARY"; fi
-            exit 0
-        fi
         cat "$out/console.log"
         echo 'App exited before presenting a frame.' >&2
         exit 1

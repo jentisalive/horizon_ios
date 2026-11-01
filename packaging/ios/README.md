@@ -101,3 +101,9 @@ The workflow also starts a separate, disposable iOS simulator without game asset
 and captures its first frame. A hosted simulator with no Metal device reports an
 explicit rendering skip; it is not evidence of rendering on a physical iPhone.
 Simulator builds select the architecture of the Mac host automatically.
+
+The simulator also exposed a Metal device that has storage and compute shaders
+but no indirect execution. Such GPUs now use the existing direct draw path; flat
+batching and GPU culling require indirect execution before allocating buffers.
+iOS no longer intercepts SIGTERM, since winit cannot programmatically exit its
+UIKit event loop. Simulator cleanup and the smoke step have bounded timeouts.

@@ -71,7 +71,8 @@ apps. It is not ready for App Store/TestFlight distribution.
 
 ## GitHub Actions IPA
 
-The `iOS test IPA` workflow builds a debug arm64 device IPA on macOS and uploads
+The `iOS test IPA` workflow cross-compiles a debug arm64 device IPA on an Intel
+macOS runner and uploads
 `Horizon-iOS-unsigned`. It runs on pushes to `codex/ios-test-port`, or manually.
 The IPA is **unsigned and contains no Minecraft resources**. Sign it with your
 own Apple development profile or sideloading tool before installing.

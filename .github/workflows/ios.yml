@@ -11,7 +11,9 @@ concurrency:
   cancel-in-progress: true
 jobs:
   ipa:
-    runs-on: macos-15
+    # Intel hosted runners cross-compile the arm64 iPhone target. Avoid the
+    # ARM-hosted pool, which failed to acquire a runner after 15 minutes.
+    runs-on: macos-15-intel
     timeout-minutes: 90
     env:
       IPHONEOS_DEPLOYMENT_TARGET: '16.0'

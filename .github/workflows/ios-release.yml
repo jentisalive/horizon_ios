@@ -9,7 +9,7 @@ permissions:
   actions: read
   contents: write
 concurrency:
-  group: ios-test-release-v0.1.0
+  group: ios-test-release-v0.1.1
   cancel-in-progress: false
 jobs:
   publish:
@@ -19,10 +19,10 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
-      SOURCE_RUN: '41354720515'
-      SOURCE_SHA: '0774151124b528ad5b98cdc24bb9af02500453d8'
-      EXPECTED_IPA_SHA256: 'c0b1ca582c396c9d6cac03977a1eb6661be4c102ee694b9928e05dacbc6dd9c8'
-      RELEASE_TAG: ios-test-v0.1.0
+      SOURCE_RUN: '41360923557'
+      SOURCE_SHA: 'af19006307de079ae034e5cd880b26a79c646ee6'
+      EXPECTED_IPA_SHA256: '8f2894d132b89083192c753fc0756888b73061b70c6fb6c26137c85c67f3b3ee'
+      RELEASE_TAG: ios-test-v0.1.1
     steps:
       - name: Verify the source build and release target
         shell: bash
@@ -34,7 +34,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: Horizon-iOS-unsigned
-          run-id: 41354720515
+          run-id: 41360923557
           github-token: ${{ github.token }}
           path: dist
       - name: Verify IPA checksum and upload release assets
